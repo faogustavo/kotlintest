@@ -2,6 +2,8 @@ package com.sksamuel.kt.extensions.system
 
 import io.kotlintest.*
 import io.kotlintest.extensions.TopLevelTest
+import io.kotlintest.extensions.system.SystemOverrideMode.ALLOW_OVERRIDE
+import io.kotlintest.extensions.system.SystemOverrideMode.DENY_OVERRIDE
 import io.kotlintest.extensions.system.SystemPropertyTestListener
 import io.kotlintest.extensions.system.withSystemProperties
 import io.kotlintest.extensions.system.withSystemProperty
@@ -98,6 +100,20 @@ class SystemPropertyFunctionTest : FunSpec({
       }
     }
     System.getProperty("wibblewobble") shouldBe "dobble"
+  }
+
+  test("System properties should not override an existing property if mode is DENY_OVERRIDE") {
+    System.setProperty("wibblewobble", "dobble")
+    withSystemProperties(mapOf("wibblewobble" to "dibble"), DENY_OVERRIDE) {
+      System.getProperty("wibblewobble") shouldBe "dobble"
+    }
+  }
+
+  test("System properties should override an existing property if mode is ALLOW_OVERRIDE") {
+    System.setProperty("wibblewobble", "dobble")
+    withSystemProperties(mapOf("wibblewobble" to "dibble"), ALLOW_OVERRIDE) {
+      System.getProperty("wibblewobble") shouldBe "dibble"
+    }
   }
 })
 

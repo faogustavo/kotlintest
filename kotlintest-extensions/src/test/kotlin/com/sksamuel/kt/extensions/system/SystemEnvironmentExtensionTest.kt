@@ -4,6 +4,9 @@ import io.kotlintest.Spec
 import io.kotlintest.TestCase
 import io.kotlintest.TestResult
 import io.kotlintest.extensions.system.SystemEnvironmentTestListener
+import io.kotlintest.extensions.system.SystemOverrideMode
+import io.kotlintest.extensions.system.SystemOverrideMode.ALLOW_OVERRIDE
+import io.kotlintest.extensions.system.SystemOverrideMode.DENY_OVERRIDE
 import io.kotlintest.extensions.system.withEnvironment
 import io.kotlintest.inspectors.forAll
 import io.kotlintest.shouldBe
@@ -39,6 +42,33 @@ class SystemEnvironmentExtensionFunctionTest : FreeSpec() {
   
         }
       }
+
+      "Should stay with specified value if mode is DENY_OVERRIDE" - {
+        System.getenv("foo") shouldBe null  // Enforcing pre conditions
+
+        withEnvironment("foo", "booz") {
+          val allResults = executeOnAllSystemEnvironmentOverloads("foo", "bar", DENY_OVERRIDE) {
+            System.getenv("foo") shouldBe "booz"
+            "RETURNED"
+          }
+
+          allResults.forAll { it shouldBe "RETURNED" }
+        }
+      }
+
+      "Should override specified value if mode is ALLOW_OVERRIDE" - {
+        System.getenv("foo") shouldBe null  // Enforcing pre conditions
+
+        withEnvironment("foo", "booz") {
+          val allResults = executeOnAllSystemEnvironmentOverloads("foo", null, ALLOW_OVERRIDE) {
+            System.getenv("foo") shouldBe null
+            "RETURNED"
+          }
+
+          allResults.forAll { it shouldBe "RETURNED" }
+
+        }
+      }
     }
   }
   
@@ -48,41 +78,61 @@ class SystemEnvironmentExtensionFunctionTest : FreeSpec() {
   
 }
 
-private suspend fun AbstractFreeSpec.FreeSpecScope.executeOnAllSystemEnvironmentOverloads(key: String, value: String?, block: suspend () -> String): List<String> {
+private suspend fun AbstractFreeSpec.FreeSpecScope.executeOnAllSystemEnvironmentOverloads(
+        key: String,
+        value: String?,
+        mode: SystemOverrideMode = ALLOW_OVERRIDE,
+        block: suspend () -> String
+): List<String> {
   val results = mutableListOf<String>()
   
   "String String overload" {
-    results += withEnvironment(key, value) {
+    results += withEnvironment(key, value, mode) {
       block()
     }
   }
   
   "Pair overload" {
-    results += withEnvironment(key to value) { block() }
+    results += withEnvironment(key to value, mode) { block() }
   }
   
   "Map overload" {
-    results += withEnvironment(mapOf(key to value)) { block() }
+    results += withEnvironment(mapOf(key to value), mode) { block() }
   }
   
   return results
 }
 
-class SystemEnvironmentTestListenerTest : ShouldSpec() {
+class SystemEnvironmentTestListenerOverwriteTest : ShouldSpec() {
   
-  override fun listeners() = listOf(SystemEnvironmentTestListener("foo", "bar"))
+  override fun listeners() = listOf(SystemEnvironmentTestListener("foo", "bar", ALLOW_OVERRIDE))
   
   init {
     should("Get extra extension from environment") {
       verifyFooIsBar()
     }
   }
-  
+
   override fun afterSpecClass(spec: Spec, results: Map<TestCase, TestResult>) {
     // The environment must be reset afterwards
     verifyFooIsUnset()
   }
   
+}
+
+class SystemEnvironmentTestListenerCreateTest : ShouldSpec() {
+
+  private val alreadyInEnvironment = System.getenv().entries.first()
+
+  override fun listeners() = listOf(SystemEnvironmentTestListener(
+          alreadyInEnvironment.key, alreadyInEnvironment.value + "FOOBARFOO", DENY_OVERRIDE
+  ))
+
+  init {
+    should("Not override environment") {
+      System.getenv(alreadyInEnvironment.key) shouldBe alreadyInEnvironment.value
+    }
+  }
 }
 
 private fun verifyFooIsBar() {
